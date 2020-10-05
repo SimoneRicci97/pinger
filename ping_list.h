@@ -4,14 +4,23 @@ typedef struct _ping_time {
 	struct _ping_time* prec;
 } ping_time;
 
-typedef struct _ping_time_list {
-	ping_time* head;
-	ping_time* tail;
-	long size;
+typedef struct _ping_stats {
 	float avg;
-	void (*add) (struct _ping_time_list*, float);
-} ping_time_list;
+	float min;
+	float max;
+	float stdev;
+	int loss;
+} ping_stats;
 
-ping_time_list* new_ping_list();
+typedef struct _ping_time_chunk {
+	ping_time* values;
+	long index;
+	long size;
+	ping_stats* chunk_stats;
+	void (*add) (struct _ping_time_chunk*, float);
+} ping_time_chunk;
 
-void _add(ping_time_list* l, float interval);
+
+ping_time_chunk* new_ping_chunk(long chunk_size);
+
+void _add(ping_time_chunk* l, float interval);

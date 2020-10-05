@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +6,7 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include "ping_list.h"
+#include "chout.h"
 
 #ifndef TEST
 #define PING "/bin/ping"
@@ -19,16 +19,13 @@
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 #define N_PING 10
-#define BUFFER_SIZE 1024
 
 int isIpAddress(char const* arg);
 int check_argv(int argc, char const* argv[]);
-char** read_ping_output(int fd);
-size_t sum_lens(char** s, int len);
-char** format_ping_output(char* s);
-int count_token(char* s);
-char* to_single_string(char** s1, int len);
 char* extract_ping_interval(const char* out_line);
+ping_stats* extract_ping_stats(char* stats_line);
+char* pattern_substring(const char* s, char* begin_pattern, char* end_pattern);
+int extract_lost_packets(char* loss_line);
 
 
 int main(int argc, char const *argv[]) {
@@ -56,21 +53,22 @@ int main(int argc, char const *argv[]) {
 	if(p > 0) {
 		close(filedes[1]);
 		waitpid(p, &pingStatus, 0);
-		char** ping_out = read_ping_output(filedes[0]);
+		char** ping_out = read_child_output(filedes[0]);
+		printf("read all\n");
 		int i=1;
-		ping_time_list* plist = new_ping_list();
+		ping_time_chunk* plist = new_ping_chunk(N_PING);
 		while(i <= N_PING) {
 			plist->add(plist, atof(extract_ping_interval(ping_out[i])));
 			i++;
 		}
-		ping_time* ptr = plist->head;
 		i = 0;
-		while(ptr != NULL) {
-			printf("interval %d: %f\n\n",i, ptr->interval);
-			ptr = ptr->next;
-			i++;
-		}
-		printf("avg: %.4f", plist->avg);
+		plist->chunk_stats = extract_ping_stats(ping_out[N_PING + 4]);
+		plist->chunk_stats->loss = extract_lost_packets(ping_out[N_PING + 3]);
+		printf("min: %f\n", plist->chunk_stats->min);
+		printf("avg: %f\n", plist->chunk_stats->avg);
+		printf("max: %f\n", plist->chunk_stats->max);
+		printf("stdev: %f\n", plist->chunk_stats->stdev);
+		printf("loss: %d\n", plist->chunk_stats->loss);
 		printf("child with pid %d exited with status %d\n", p, pingStatus);
 	} else {
 		while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR)) {}
@@ -81,88 +79,41 @@ int main(int argc, char const *argv[]) {
 }
 
 
+int extract_lost_packets(char* loss_line) {
+	char* transmitted = pattern_substring(loss_line, "", " packets transmitted");
+	char* received = pattern_substring(loss_line, "transmitted, ", " received,");
+	return atoi(transmitted) - atoi(received);
+}
+
+
+ping_stats* extract_ping_stats(char* stats_line) {
+	ping_stats* pstats = malloc(sizeof(ping_stats));
+	char* stats = pattern_substring(stats_line, " = ", " ms");
+	printf("stats substring: %s\n", stats);
+	char* value = strtok(stats, "/");
+	pstats->min = atof(value);
+	value = strtok(NULL, "/");
+	pstats->avg = atof(value);
+	value = strtok(NULL, "/");
+	pstats->max = atof(value);
+	value = strtok(NULL, "/");
+	pstats->stdev = atof(value);
+	return pstats;
+}
+
+
 char* extract_ping_interval(const char* out_line) {
-	char* s = strndup(out_line, strlen(out_line));
-	char* index = strstr(s, "time=");
-	char* index1 = strstr(s, " ms" );
-	index += strlen("time=")  * sizeof(char);
+	return pattern_substring(out_line, "time=", " ms");
+}
+
+
+char* pattern_substring(const char* s, char* begin_pattern, char* end_pattern) {
+	char* copy = strndup(s, strlen(s));
+	char* index = strstr(copy, begin_pattern);
+	char* index1 = strstr(copy, end_pattern);
+	index += strlen(begin_pattern)  * sizeof(char);
 	char* s1 = strndup(index, (index1 - index) / sizeof(char));
-	printf("%s\n", s1);
 	return s1;
-}
-
-
-char** format_ping_output(char* s) {
-	char** lines;
-	int n_lines = count_token(s);
-	lines = malloc((n_lines + 1) * sizeof(char*));
-	for(int i=0; i<n_lines; i++) {
-		lines[i] = malloc(128 * sizeof(char));
-	}
-	int i = 0;
-	size_t index = strcspn(s, "\n");
-	while(strlen(s) > 0 && s[index] == '\n') {
-		strncpy(lines[i], s, index);
-		printf("%s\n", lines[i]);
-		i++;
-		s = &s[index+1];
-		index = strcspn(s, "\n");
-	}
-	lines[i] = NULL;
-	return lines;
-}
-
-
-char* to_single_string(char** s1, int len) {
-	char* s = malloc(sum_lens(s1, len) * sizeof(char));
-	int copied = 0;
-	for(int i=0; i<len; i++) {
-		strncpy(&s[copied], s1[i], strlen(s1[i]));
-		copied += strlen(s1[i]);
-	}
-	return s;
-}
-
-
-int count_token(char* s) {
-	int i = 0;
-	int count = 0;
-	while(s[i] != '\0') {
-		if(s[i] == '\n') count ++;
-		i++;
-	}
-	return count;
-}
-
-
-size_t sum_lens(char** s, int len) {
-	size_t sum = 0;
-	for(int i=0; i<len; i++) {
-		sum += strlen(s[i]);
-	}
-	return sum;
-}
-
-char** read_ping_output(int fd) {
-	char buffer[BUFFER_SIZE];
-	char** out = malloc(128 * sizeof(char*));
-	int count = 0;
-	ssize_t r = read(fd, buffer, BUFFER_SIZE);
-	while(r != 0) {
-		if(r == -1 && errno != EINTR) {
-			printf("errno: %d\nEINTR: %d\n", errno, EINTR);
-			perror("read");
-			exit(1);
-		} else {
-			out[count] = malloc(BUFFER_SIZE * sizeof(char));
-			strncpy(out[count], buffer, strlen(buffer));
-			count++;
-		}
-		r = read(fd, buffer, BUFFER_SIZE);
-	}
-	out[count] = NULL;
-	close(fd);
-	return format_ping_output(to_single_string(out, count));
 }
 
 

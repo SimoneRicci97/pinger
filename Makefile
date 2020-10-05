@@ -1,23 +1,37 @@
-CC =	gcc
-CCFLAGS += -Wall
-OPTIONFLAGS = -L. -lpinglist
+CC			=  gcc
+AR          =  ar
+DEBUGFLAGS	+= -std=c99 -Wall -pedantic -g -fsanitize=address -DMAKE_VALGRIND_HAPPY -D_GNU_SOURCE
+CFLAGS		+= -std=c99 -Wall -pedantic -g -DMAKE_VALGRIND_HAPPY -D_GNU_SOURCE
+ARFLAGS     =  rvs
+INCLUDES	= -I.
+LDFLAGS 	= -L.
+OPTFLAGS	= -O3
+LIB 		= -lpinger
 
-TARGETS= somma
+TARGETS = pinger
+
+OBJETCS = ping_list.o \
+			chout.o
+
+INCLUDE_FILES = chout.h \
+				ping_list.h
 
 .PHONY: clean exec cleanall
 
-pinger: main.c libpinglist.a
-	$(CC) -c main.c -o pinger.o
-	$(CC) $(CCFLAGS) -o pinger pinger.o -L. -lpinglist
+%: %.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< $(LDFLAGS) 
 
-libpinglist.a: ping_list.o
-	ar rcs libpinglist.a ping_list.o
+%.o: %.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -c -o $@ $<
 
-ping_list.o: ping_list.c ping_list.h
-	$(CC) -c ping_list.c -o ping_list.o
+pinger: main.o libpinger.a $(INCLUDE_FILES)
+	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+libpinger.a: $(OBJETCS)
+	$(AR) $(ARFLAGS) $@ $^
 
 clean:
-	rm -f libpinglist.a ping_list.o
+	rm -f *.a *.o
 
 cleanall:
-	rm -f libpinglist.a ping_list.o pinger
+	rm -f *.a *.o pinger
