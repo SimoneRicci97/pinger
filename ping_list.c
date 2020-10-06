@@ -70,14 +70,15 @@ void _add_chunk(chunk_list* cl, ping_time_chunk* chunk) {
 void _destroy_chunk_list(chunk_list* cl) {
 	ping_time_chunk* ptr = cl->head;
 	while(ptr != NULL) {
+		ptr->prec = NULL;
 		cl->head = ptr->next;
 		ptr->destroy(ptr);
 		ptr = cl->head;
-		ptr->prec = NULL;
 	}
 	if(cl->global_stats != NULL) {
 		free(cl->global_stats);
 	}
+	free(cl);
 }
 
 float __min__(float f1, float f2) {
