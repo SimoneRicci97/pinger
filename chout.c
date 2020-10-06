@@ -13,30 +13,34 @@ int count_token(char* s);
 char* to_single_string(char** s1);
 
 char** format_child_output(char* s) {
+	char* store = s;
 	char** lines;
 	int n_lines = count_token(s);
 	lines = malloc((n_lines + 1) * sizeof(char*));
 	
 	int i = 0;
 	size_t index = strcspn(s, "\n");
-	while(strlen(s) > 0 && s[index] == '\n') {
-		lines[i] = malloc(index * sizeof(char));
+	while(s[index] != '\0' && strlen(s) > 0 && s[index] == '\n') {
+		lines[i] = malloc((index + 1) * sizeof(char));
 		strncpy(lines[i], s, index);
-
+		lines[i][index] = '\0';
 		// DEBUG
-		printf("%d: %s\n", i, lines[i]);
+		//printf("%d: %s\n", i, lines[i]);
 		
 		i++;
-		s = &s[index+1];
-		index = strcspn(s, "\n");
+		if(s[index] != '\0') {
+			s = &s[index+1];
+			index = strcspn(s, "\n");
+		}
 	}
 	lines[i] = NULL;
+	free(store);
 	return lines;
 }
 
 
 char* to_single_string(char** s1) {
-	char* s = malloc(sum_lens(s1) * sizeof(char));
+	char* s = malloc((sum_lens(s1) + 1) * sizeof(char));
 	int copied = 0;
 	int i = 0;
 	while(s1[i] != NULL) {
@@ -44,6 +48,7 @@ char* to_single_string(char** s1) {
 		copied += strlen(s1[i]);
 		i++;
 	}
+	s[sum_lens(s1)] = '\0';
 	return s;
 }
 
@@ -51,7 +56,6 @@ char* to_single_string(char** s1) {
 int count_token(char* s) {
 	int i = 0;
 	int count = 0;
-	char* new_line = strstr(s, "\n");
 	while(s[i] != '\0') {
 		if(s[i] == '\n') {
 			count ++;
@@ -84,13 +88,17 @@ char** read_child_output(int fd) {
 			perror("read");
 			exit(1);
 		} else {
-			out[count] = malloc(CHOUT_BUFFER_SIZE * sizeof(char));
-			strncpy(out[count], buffer, strlen(buffer));
+			out[count] = strndup(buffer, strlen(buffer));
 			count++;
 		}
 		r = read(fd, buffer, CHOUT_BUFFER_SIZE);
 	}
 	out[count] = NULL;
 	close(fd);
-	return format_child_output(to_single_string(out));
+	char** formatted = format_child_output(to_single_string(out));
+	for(int i=0; i<count; i++) {
+		free(out[i]);
+	}
+	free(out);
+	return formatted;
 }

@@ -18,9 +18,21 @@ typedef struct _ping_time_chunk {
 	long size;
 	ping_stats* chunk_stats;
 	void (*add) (struct _ping_time_chunk*, float);
+	void (*destroy) (struct _ping_time_chunk*);
+	struct _ping_time_chunk* next;
+	struct _ping_time_chunk* prec;
 } ping_time_chunk;
 
 
+typedef struct _chunk_list {
+	ping_time_chunk* head;
+	ping_time_chunk* tail;
+	int size;
+	ping_stats* global_stats;
+	void (*add) (struct _chunk_list*, ping_time_chunk*);
+	void (*destroy) (struct _chunk_list*);
+} chunk_list;
+
 ping_time_chunk* new_ping_chunk(long chunk_size);
 
-void _add(ping_time_chunk* l, float interval);
+chunk_list* new_chunk_list();
