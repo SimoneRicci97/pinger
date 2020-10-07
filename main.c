@@ -45,11 +45,6 @@ int main(int argc, char *argv[]) {
 	if(args == NULL) {
 		exit(1);
 	}
-	printf("n_ping:\t\t%s\n", args->n_ping);
-	printf("size:\t\t%d\n", args->size);
-	for(int i=0; i<args->size; i++) {
-		printf("%d:\t\t%s\n", i, args->hosts[i]);
-	}
 	chunk_list* chunks = new_chunk_list();
 	for(int q=0; q<args->size; q++) {
 		char* ping_argv[5] = {PING, args->hosts[q], "-c", args->n_ping, NULL};
@@ -62,25 +57,26 @@ int main(int argc, char *argv[]) {
 		if(p > 0) {
 			close(filedes[1]);
 			waitpid(p, &pingStatus, 0);
-			if(pingStatus != 0) continue;
-			char** ping_out = read_child_output(filedes[0]);
-			int i=1;
-			ping_time_chunk* plist = new_ping_chunk(N_PING);
-			while(i <= N_PING) {
-				char* string_interval = extract_ping_interval(ping_out[i]);
-				plist->add(plist, atof(string_interval));
-				free(string_interval);
-				i++;
+				if(pingStatus == 0) {
+				char** ping_out = read_child_output(filedes[0]);
+				int i=1;
+				ping_time_chunk* plist = new_ping_chunk(N_PING);
+				while(i <= N_PING) {
+					char* string_interval = extract_ping_interval(ping_out[i]);
+					plist->add(plist, atof(string_interval));
+					free(string_interval);
+					i++;
+				}
+				i = 0;
+				plist->chunk_stats = extract_ping_stats(ping_out[N_PING + 4]);
+				plist->chunk_stats->loss = extract_lost_packets(ping_out[N_PING + 3]);
+				chunks->add(chunks, plist);
+				//plist->destroy(plist);
+				for(int i=0; i<N_PING + 5; i++) {
+					free(ping_out[i]);
+				}
+				free(ping_out);
 			}
-			i = 0;
-			plist->chunk_stats = extract_ping_stats(ping_out[N_PING + 4]);
-			plist->chunk_stats->loss = extract_lost_packets(ping_out[N_PING + 3]);
-			chunks->add(chunks, plist);
-			//plist->destroy(plist);
-			for(int i=0; i<N_PING + 5; i++) {
-				free(ping_out[i]);
-			}
-			free(ping_out);
 			printf("%d) child with pid %d exited with status %d\n", q, p, pingStatus);
 		} else {
 			//chunks->destroy(chunks);
