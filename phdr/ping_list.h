@@ -1,3 +1,6 @@
+#ifndef __PING_CHUNK__
+#define __PING_CHUNK__ 
+
 typedef struct _ping_time {
 	float interval;
 	struct _ping_time* next;
@@ -36,3 +39,11 @@ typedef struct _chunk_list {
 ping_time_chunk* new_ping_chunk(long chunk_size);
 
 chunk_list* new_chunk_list();
+
+chunk_list* sublist(chunk_list* cl, int start, int end);
+
+chunk_list* sublist2end(chunk_list* cl, int start);
+
+chunk_list* sublist2start(chunk_list* cl, int end);
+
+#endif

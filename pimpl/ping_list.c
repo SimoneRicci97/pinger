@@ -9,6 +9,7 @@ void _destroy_chunk_list(chunk_list* cl);
 float __min__(float f1, float f2);
 float __max__(float f1, float f2);
 chunk_list* new_chunk_list();
+ping_time_chunk* ping_time_chunk_clone(ping_time_chunk* toclone);
 
 ping_time_chunk* new_ping_chunk(long chunk_size) {
 	ping_time_chunk* l = malloc(sizeof(ping_time_chunk));
@@ -17,7 +18,23 @@ ping_time_chunk* new_ping_chunk(long chunk_size) {
 	l->index = 0;
 	l->add = _add;
 	l->destroy = _destroy;
+	l->next = NULL;
+	l->prec = NULL;
 	return l;
+}
+
+ping_time_chunk* ping_time_chunk_clone(ping_time_chunk* toclone) {
+	ping_time_chunk* clone = new_ping_chunk(toclone->size);
+	for(int i= 0; i<toclone->index; i++) {
+		clone->add(clone, toclone->values[i].interval);
+	}
+	clone->chunk_stats = malloc(sizeof(ping_stats));
+	clone->chunk_stats->min = toclone->chunk_stats->min;
+	clone->chunk_stats->max = toclone->chunk_stats->max;
+	clone->chunk_stats->avg = toclone->chunk_stats->avg;
+	clone->chunk_stats->stdev = toclone->chunk_stats->stdev;
+	clone->chunk_stats->loss = toclone->chunk_stats->loss;
+	return clone;
 }
 
 void _add(ping_time_chunk* l, float interval) {
@@ -33,7 +50,9 @@ void _add(ping_time_chunk* l, float interval) {
 
 
 void _destroy(ping_time_chunk* l) {
-	if(l == NULL) return;
+	if(l == NULL) {
+		return;
+	}
 	if(l->values != NULL) free(l->values);
 	if(l->chunk_stats != NULL) free(l->chunk_stats);
 	free(l);
@@ -100,20 +119,24 @@ chunk_list* new_chunk_list() {
 	return cl;
 }
 
-// int main4test(int argc, char const *argv[])
-// {
-// 	ping_time_chunk* l = new_ping_chunk(10);
-// 	float f = 1.02;
-// 	for(int i=0; i<10; i++) {
-// 		l->add(l, f);
-// 		f = f + 1.f;
-// 	}
-// 	int i = 0;
-// 	for(int i=0; i<l->size; i++) {
-// 		ping_time ptr = l->values[i];
-// 		printf("%d: %.2f\n", i, ptr.interval);
-// 		i++;
-// 	}
-// 	printf("printed: %d\nsize: %u\n", i, l->size);
-// 	return 0;
-// }
+chunk_list* sublist2end(chunk_list* cl, int start) {
+	return sublist(cl, start >= 0 ? start : 0, cl->size);
+}
+
+chunk_list* sublist2start(chunk_list* cl, int end) {
+	return sublist(cl, 0, cl->size);
+}
+
+chunk_list* sublist(chunk_list* cl, int start, int end) {
+	chunk_list* clone = new_chunk_list();
+	if(start < 0 || end > cl->size || end <= start) return clone;
+	ping_time_chunk* ptr = cl->head;
+	for(int i=0; i < start; i++) ptr = ptr->next;
+
+	while(start < end && ptr != NULL) {
+		clone->add(clone, ping_time_chunk_clone(ptr));
+		ptr = ptr->next;
+		start++;
+	}
+	return clone;
+}

@@ -4,18 +4,16 @@
 #include <errno.h>
 #include <unistd.h>
 #include "chout.h"
+#include "string_utils.h"
 
 #define CHOUT_BUFFER_SIZE 128
 
-int sum_lens(char** s);
 char** format_child_output(char* s);
-int count_token(char* s);
-char* to_single_string(char** s1);
 
 char** format_child_output(char* s) {
 	char* store = s;
 	char** lines;
-	int n_lines = count_token(s);
+	int n_lines = tkncntc(s, '\n');
 	lines = malloc((n_lines + 1) * sizeof(char*));
 	
 	int i = 0;
@@ -38,44 +36,6 @@ char** format_child_output(char* s) {
 	return lines;
 }
 
-
-char* to_single_string(char** s1) {
-	char* s = malloc((sum_lens(s1) + 1) * sizeof(char));
-	int copied = 0;
-	int i = 0;
-	while(s1[i] != NULL) {
-		strncpy(&s[copied], s1[i], strlen(s1[i]));
-		copied += strlen(s1[i]);
-		i++;
-	}
-	s[sum_lens(s1)] = '\0';
-	return s;
-}
-
-
-int count_token(char* s) {
-	int i = 0;
-	int count = 0;
-	while(s[i] != '\0') {
-		if(s[i] == '\n') {
-			count ++;
-		}
-		i++;
-	}
-	return count;
-}
-
-
-int sum_lens(char** s) {
-	int sum = 0;
-	int i = 0;
-	while(s[i] != NULL) {
-		sum += strlen(s[i]);
-		i++;
-	}
-	return sum;
-}
-
 char** read_child_output(int fd) {
 	char buffer[CHOUT_BUFFER_SIZE + 1];
 	char** out = malloc(128 * sizeof(char*));
@@ -95,7 +55,7 @@ char** read_child_output(int fd) {
 	}
 	out[count] = NULL;
 	close(fd);
-	char** formatted = format_child_output(to_single_string(out));
+	char** formatted = format_child_output(string_builder(out, count, NULL));
 	for(int i=0; i<count; i++) {
 		free(out[i]);
 	}

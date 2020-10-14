@@ -1,26 +1,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
-#include "ping_list.h"
-#include "chout.h"
+#include "phdr/ping_list.h"
+#include "phdr/chout.h"
+#include "phdr/string_utils.h"
+#include "phdr/htable.h"
+#include "phdr/configuration.h"
+#include "phdr/pscheck.h"
 
-#ifndef TEST
-#define PING "/bin/ping"
-#endif
-
-#ifdef TEST
-#define PING "./test"
+#ifdef _PINGER_MOCK
+	#define PING "./pingmock"
+#else
+	#define PING "/bin/ping"
 #endif
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
-#define N_PING 10
-#define MAX_HOST_NUMBER 4
+
+#define MAX_HOST "pinger.maxhost"
+#define NPING "pinger.default.nping"
 
 typedef struct _pinger_args {
 	char** hosts;
@@ -28,56 +32,62 @@ typedef struct _pinger_args {
 	int size;
 } pinger_args;
 
-char* string_concat(char* s, char* s1);
 void usage(char* prog_name, char* message);
 int isIpAddress(char* arg);
-pinger_args* check_argv(int argc, char* argv[]);
+pinger_args* check_argv(int argc, char* argv[], htable* conf);
 char* extract_ping_interval(const char* out_line);
 ping_stats* extract_ping_stats(char* stats_line);
-char* pattern_substring(const char* s, char* begin_pattern, char* end_pattern);
 int extract_lost_packets(char* loss_line);
+void output(chunk_list* chunks);
 
 
 int main(int argc, char *argv[]) {
-	// char* targetHost = argv[1];
-	pinger_args* args = check_argv(argc, argv);
-	int pingStatus;
+	char* conf_path[3] = {"./", argv[0], ".conf"};
+	char* conf_path_s = string_builder(conf_path, 3, NULL);
+	htable* conf = load_configuration(conf_path_s);
+	free(conf_path_s);
+	pinger_args* args = check_argv(argc, argv, conf);
+
 	if(args == NULL) {
 		exit(1);
 	}
 	chunk_list* chunks = new_chunk_list();
-	for(int q=0; q<args->size; q++) {
+	int q = 0;
+	for(int k=0; k<10; k++) {
 		char* ping_argv[5] = {PING, args->hosts[q], "-c", args->n_ping, NULL};
 		int filedes[2];
 		if (pipe(filedes) == -1) {
 			perror("pipe");
 			exit(1);
 		}
+		int pingStatus;
 		int p = fork();
 		if(p > 0) {
 			close(filedes[1]);
 			waitpid(p, &pingStatus, 0);
-				if(pingStatus == 0) {
+			if(pingStatus == 0) {
 				char** ping_out = read_child_output(filedes[0]);
 				int i=1;
-				ping_time_chunk* plist = new_ping_chunk(N_PING);
-				while(i <= N_PING) {
+				ping_time_chunk* plist = new_ping_chunk(atoi(args->n_ping));
+				while(i <= atoi(args->n_ping)) {
 					char* string_interval = extract_ping_interval(ping_out[i]);
 					plist->add(plist, atof(string_interval));
 					free(string_interval);
 					i++;
 				}
 				i = 0;
-				plist->chunk_stats = extract_ping_stats(ping_out[N_PING + 4]);
-				plist->chunk_stats->loss = extract_lost_packets(ping_out[N_PING + 3]);
+				plist->chunk_stats = extract_ping_stats(ping_out[atoi(args->n_ping) + 4]);
+				plist->chunk_stats->loss = extract_lost_packets(ping_out[atoi(args->n_ping) + 3]);
+				check_stats(chunks, plist);
 				chunks->add(chunks, plist);
 				//plist->destroy(plist);
-				for(int i=0; i<N_PING + 5; i++) {
+				for(int i=0; i<atoi(args->n_ping) + 5; i++) {
 					free(ping_out[i]);
 				}
 				free(ping_out);
 			}
-			printf("%d) child with pid %d exited with status %d\n", q, p, pingStatus);
+			printf("%d) child with pid %d exited with status %d\n", k, p, pingStatus);
+			sleep(1);
 		} else {
 			//chunks->destroy(chunks);
 			while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR)) {}
@@ -85,22 +95,31 @@ int main(int argc, char *argv[]) {
 			execv(PING, ping_argv);
 		}
 	}
-
-	ping_time_chunk* ptr = chunks->head;
-	printf("min/ avg/ max/ sdev\n");
-	while(ptr != NULL) {
-		printf("%.3f/%.3f/%.3f/%.3f\n", ptr->chunk_stats->min, ptr->chunk_stats->avg, ptr->chunk_stats->max, ptr->chunk_stats->stdev);
-		ptr = ptr->next;
-	}
-	printf("-----------------------\n");
-	printf("%.3f/%.3f/%.3f/%.3f\n", chunks->global_stats->min, chunks->global_stats->avg, chunks->global_stats->max, chunks->global_stats->stdev);
+	output(chunks);
 	chunks->destroy(chunks);
+	conf->destroy(conf);
 	for(int i=0; i<args->size; i++) {
 		free(args->hosts[i]);
 	}
 	free(args->hosts);
 	free(args);
 	return 0;
+}
+
+void output(chunk_list* chunks) {
+	if(chunks->head != NULL) {
+		ping_time_chunk* ptr = chunks->head;
+		printf("min/ avg/ max/ sdev\n");
+		while(ptr != NULL) {
+			printf("%.3f/%.3f/%.3f/%.3f\n", ptr->chunk_stats->min, ptr->chunk_stats->avg, ptr->chunk_stats->max, ptr->chunk_stats->stdev);
+			ptr = ptr->next;
+		}
+		printf("-----------------------\n");
+		printf("%.3f/%.3f/%.3f/%.3f\n", chunks->global_stats->min, chunks->global_stats->avg, chunks->global_stats->max, chunks->global_stats->stdev);
+	} else {
+		printf("### No pings ###\n");
+	}
+	
 }
 
 
@@ -136,17 +155,6 @@ char* extract_ping_interval(const char* out_line) {
 }
 
 
-char* pattern_substring(const char* s, char* begin_pattern, char* end_pattern) {
-	char* copy = strndup(s, strlen(s));
-	char* index = strstr(copy, begin_pattern);
-	char* index1 = strstr(copy, end_pattern);
-	index += strlen(begin_pattern)  * sizeof(char);
-	char* s1 = strndup(index, (index1 - index) / sizeof(char));
-	free(copy);
-	return s1;
-}
-
-
 int isIpAddress(char* arg) {
 	char ipBytes[4];
 	int i=0;
@@ -171,47 +179,27 @@ void usage(char* prog_name, char* message) {
 		fprintf(stderr, "%s\n", message);
 	}
 	fprintf(stderr, "Use %s -l host_list... [-ch]\n", prog_name);
-	fprintf(stderr, "-l\t| host comma separated list.\n");
 	fprintf(stderr, "-c\t| number of ping\n");
 	fprintf(stderr, "-h\t| print this message\n");
+	fprintf(stderr, "\nhost_list:\t host comma separated list.\n");
 }
 
 
-char* string_concat(char* s, char* s1) {
-	char* z = malloc((strlen(s) + strlen(s1)));
-	strncpy(z, s, strlen(s));
-	strncat(z, s1, strlen(s1));
-	return z;
-}
-
-
-pinger_args* check_argv(int argc, char* argv[]) {
+pinger_args* check_argv(int argc, char* argv[], htable* conf) {
 	if(argc <= 1) return NULL;
-	const char* optstring = "c:l:h:";
+	const char* optstring = "c:h";
 	pinger_args* args = malloc(sizeof(pinger_args));
-	args->hosts = malloc(MAX_HOST_NUMBER * sizeof(char*));
 	args->size = 0;
 	char optc;
+	int carg = 0;
 	while((optc = getopt(argc, argv, optstring)) != -1) {
 		switch(optc) {
 			case 'c': {
 				args->n_ping = optarg;
-			} break;
-			case 'l': {
-				char* host_list = strdup(optarg);
-				char* ipAddr = strtok(host_list, ",");
-				while(ipAddr != NULL) {
-					args->hosts[args->size] = strndup(ipAddr, strlen(ipAddr));
-					args->size++;
-					ipAddr = strtok(NULL, ",");
-				}
-				int i = args->size;
-				while(i < MAX_HOST_NUMBER) args->hosts[i++] = NULL;
-				free(host_list);
+				carg = 1;
 			} break;
 			case 'h': {
 				usage(argv[0], NULL);
-				free(args->hosts);
 				free(args);
 				return NULL;
 			} break;
@@ -225,6 +213,13 @@ pinger_args* check_argv(int argc, char* argv[]) {
 			}
 		} 
 	}
+	if(optind > 0 && argv[optind] != NULL) {
+		args->hosts = strspltc(argv[optind], ',', &args->size);
+	} else {
+		usage(argv[0], "Missing host argument.");
+		return NULL;
+	}
+	if(!carg) args->n_ping = get(conf, NPING, strlen(NPING));
 	for(int i=1; i<argc; i++) {
 		if(!isIpAddress(argv[i])) {
 			char* errmessage = string_concat(argv[i], " is malformed.\n");
