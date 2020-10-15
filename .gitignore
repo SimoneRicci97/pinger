@@ -58,4 +58,3 @@ example.make
 pingmock.c
 pingmock
 build/
-Makefile
