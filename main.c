@@ -7,12 +7,13 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
-#include "phdr/ping_list.h"
-#include "phdr/chout.h"
-#include "phdr/string_utils.h"
-#include "phdr/htable.h"
-#include "phdr/configuration.h"
-#include "phdr/pscheck.h"
+#include "lib/ping_list.h"
+#include "lib/chout.h"
+#include "lib/string_utils.h"
+#include "lib/htable.h"
+#include "lib/configuration.h"
+#include "lib/pscheck.h"
+#include "pinger_config.h"
 
 #ifdef _PINGER_MOCK
 	#define PING "./pingmock"
@@ -39,10 +40,11 @@ char* extract_ping_interval(const char* out_line);
 ping_stats* extract_ping_stats(char* stats_line);
 int extract_lost_packets(char* loss_line);
 void output(chunk_list* chunks);
+void version(char* prog_name);
 
 
 int main(int argc, char *argv[]) {
-	char* conf_path[3] = {"./", argv[0], ".conf"};
+	char* conf_path[3] = {"../", argv[0], ".conf"};
 	char* conf_path_s = string_builder(conf_path, 3, NULL);
 	htable* conf = load_configuration(conf_path_s);
 	free(conf_path_s);
@@ -174,10 +176,17 @@ int isIpAddress(char* arg) {
 }
 
 
+void version(char* prog_name) {
+	fprintf(stderr, "%s version: %d.%d.%d\n", prog_name, PINGER_VERSION_MAJOR, PINGER_VERSION_MINOR, PINGER_VERSION_PATCH);
+	fprintf(stderr, "\n");
+}
+
+
 void usage(char* prog_name, char* message) {
 	if(message != NULL) {
 		fprintf(stderr, "%s\n", message);
 	}
+	version(prog_name);
 	fprintf(stderr, "Use %s -l host_list... [-ch]\n", prog_name);
 	fprintf(stderr, "-c\t| number of ping\n");
 	fprintf(stderr, "-h\t| print this message\n");
@@ -187,7 +196,7 @@ void usage(char* prog_name, char* message) {
 
 pinger_args* check_argv(int argc, char* argv[], htable* conf) {
 	if(argc <= 1) return NULL;
-	const char* optstring = "c:h";
+	const char* optstring = "c:hv";
 	pinger_args* args = malloc(sizeof(pinger_args));
 	args->size = 0;
 	char optc;
@@ -200,6 +209,11 @@ pinger_args* check_argv(int argc, char* argv[], htable* conf) {
 			} break;
 			case 'h': {
 				usage(argv[0], NULL);
+				free(args);
+				return NULL;
+			} break;
+			case 'v': {
+				version(argv[0]);
 				free(args);
 				return NULL;
 			} break;

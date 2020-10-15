@@ -3,7 +3,7 @@ AR          =  ar
 DEBUGFLAGS	+= -std=c99 -Wall -pedantic -g -DMAKE_VALGRIND_HAPPY -D_GNU_SOURCE
 CFLAGS		+= -std=c99 -Wall -pedantic -DMAKE_VALGRIND_HAPPY -D_GNU_SOURCE
 ARFLAGS     =  rvs
-INCLUDES	= -I./phdr
+INCLUDES	= -I./lib
 LDFLAGS 	= -L.
 OPTFLAGS	= -O3
 LIBS		= -lpinger -lutils
@@ -18,12 +18,12 @@ UTILS = chout.o \
 		htable.o \
 		configuration.o
 
-INCLUDE_FILES = phdr/chout.h \
-				phdr/ping_list.h \
-				phdr/string_utils.h \
-				phdr/htable.h \
-				phdr/configuration.h \
-				phdr/pscheck.h
+INCLUDE_FILES = lib/chout.h \
+				lib/ping_list.h \
+				lib/string_utils.h \
+				lib/htable.h \
+				lib/configuration.h \
+				lib/pscheck.h
 
 .PHONY: clean exec cleanall
 
@@ -31,7 +31,7 @@ INCLUDE_FILES = phdr/chout.h \
 #	echo "Building $@"
 #	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< $(LDFLAGS) 
 
-%.o: pimpl/%.c
+%.o: lib/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -c -o $@ $<
 
 
