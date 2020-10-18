@@ -7,6 +7,8 @@
 htable_entry* __get_by_key(htable* ht, htable_entry_l* hashed, void* key);
 long __insert_or_replace(htable* ht, htable_entry_l* hashed, htable_entry* entry);
 void _htabledestroy(htable* ht);
+void _put(htable* ht, void* key, void* value, size_t size);
+void* _get(htable* ht, void* key, size_t size);
 
 unsigned int hash_function(void* key) {
 	char *datum = (char *)key;
@@ -47,6 +49,8 @@ htable* new_htable_lf(float load_factor, void (*destroy_key) (void*), \
 	ht->destroy = _htabledestroy;
 	ht->destroy_key = destroy_key;
 	ht->destroy_val = destroy_val;
+	ht->put = _put;
+	ht->get = _get;
 	return ht;
 }
 
@@ -70,7 +74,7 @@ void _htabledestroy(htable* ht) {
 	free(ht);
 }
 
-void put(htable* ht, void* key, void* value, size_t size) {
+void _put(htable* ht, void* key, void* value, size_t size) {
 	htable_entry* entry = malloc(sizeof(htable_entry));
 	entry->key = key;
 	entry->data = value;
@@ -93,7 +97,7 @@ void put(htable* ht, void* key, void* value, size_t size) {
 }
 
 
-void* get(htable* ht, void* key, size_t size) {
+void* _get(htable* ht, void* key, size_t size) {
 	unsigned int hash_code = ht->htable_hashf(key);
 	htable_entry_l* ptr = ht->keys[hash_code];
 

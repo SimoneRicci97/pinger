@@ -1,19 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include "ping_list.h"
 
-void _add(ping_time_chunk* l, float interval);
-void _destroy(ping_time_chunk* l);
-void _add_chunk(chunk_list* cl, ping_time_chunk* chunk);
+void _add(ping_chunk* l, float interval);
+void _destroy(ping_chunk* l);
+void _add_chunk(chunk_list* cl, ping_chunk* chunk);
 void _destroy_chunk_list(chunk_list* cl);
 float __min__(float f1, float f2);
 float __max__(float f1, float f2);
 chunk_list* new_chunk_list();
-ping_time_chunk* ping_time_chunk_clone(ping_time_chunk* toclone);
+ping_chunk* ping_chunk_clone(ping_chunk* toclone);
 
-ping_time_chunk* new_ping_chunk(long chunk_size) {
-	ping_time_chunk* l = malloc(sizeof(ping_time_chunk));
-	l->values = malloc(sizeof(ping_time) * chunk_size);
+ping_chunk* new_ping_chunk(long chunk_size) {
+	ping_chunk* l = malloc(sizeof(ping_chunk));
+	l->values = malloc(sizeof(float) * chunk_size);
 	l->size = 0;
 	l->index = 0;
 	l->add = _add;
@@ -23,10 +24,10 @@ ping_time_chunk* new_ping_chunk(long chunk_size) {
 	return l;
 }
 
-ping_time_chunk* ping_time_chunk_clone(ping_time_chunk* toclone) {
-	ping_time_chunk* clone = new_ping_chunk(toclone->size);
+ping_chunk* ping_chunk_clone(ping_chunk* toclone) {
+	ping_chunk* clone = new_ping_chunk(toclone->size);
 	for(int i= 0; i<toclone->index; i++) {
-		clone->add(clone, toclone->values[i].interval);
+		clone->add(clone, toclone->values[i]);
 	}
 	clone->chunk_stats = malloc(sizeof(ping_stats));
 	clone->chunk_stats->min = toclone->chunk_stats->min;
@@ -37,19 +38,15 @@ ping_time_chunk* ping_time_chunk_clone(ping_time_chunk* toclone) {
 	return clone;
 }
 
-void _add(ping_time_chunk* l, float interval) {
-	ping_time* item = malloc(sizeof(ping_time));
-	item->next = NULL;
-	item->prec = NULL;
-	item->interval = interval;
-	l->values[l->index].interval = interval;
+void _add(ping_chunk* l, float interval) {
+	l->values[l->index] = interval;
 	l->index++;
 	l->size++;
 	l->chunk_stats = NULL;
 }
 
 
-void _destroy(ping_time_chunk* l) {
+void _destroy(ping_chunk* l) {
 	if(l == NULL) {
 		return;
 	}
@@ -59,7 +56,8 @@ void _destroy(ping_time_chunk* l) {
 }
 
 
-void _add_chunk(chunk_list* cl, ping_time_chunk* chunk) {
+void _add_chunk(chunk_list* cl, ping_chunk* chunk) {
+	pthread_mutex_lock(&cl->mutex);
 	if(cl->head == NULL) cl->head = chunk;
 	chunk->next = NULL;
 	chunk->prec = cl->tail;
@@ -83,11 +81,12 @@ void _add_chunk(chunk_list* cl, ping_time_chunk* chunk) {
 		cl->global_stats = stats;
 	}
 	cl->size++;
+	pthread_mutex_unlock(&cl->mutex);
 }
 
 
 void _destroy_chunk_list(chunk_list* cl) {
-	ping_time_chunk* ptr = cl->head;
+	ping_chunk* ptr = cl->head;
 	while(ptr != NULL) {
 		ptr->prec = NULL;
 		cl->head = ptr->next;
@@ -116,6 +115,7 @@ chunk_list* new_chunk_list() {
 	cl->global_stats = NULL;
 	cl->add = _add_chunk;
 	cl->destroy = _destroy_chunk_list;
+	pthread_mutex_init(&cl->mutex, NULL);
 	return cl;
 }
 
@@ -130,11 +130,11 @@ chunk_list* sublist2start(chunk_list* cl, int end) {
 chunk_list* sublist(chunk_list* cl, int start, int end) {
 	chunk_list* clone = new_chunk_list();
 	if(start < 0 || end > cl->size || end <= start) return clone;
-	ping_time_chunk* ptr = cl->head;
+	ping_chunk* ptr = cl->head;
 	for(int i=0; i < start; i++) ptr = ptr->next;
 
 	while(start < end && ptr != NULL) {
-		clone->add(clone, ping_time_chunk_clone(ptr));
+		clone->add(clone, ping_chunk_clone(ptr));
 		ptr = ptr->next;
 		start++;
 	}

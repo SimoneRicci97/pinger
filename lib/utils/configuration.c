@@ -22,7 +22,7 @@ htable* load_configuration(char* conf_file) {
 			free(configuration[0]);
 			free(configuration[1]);
 			free(configuration);
-			put(conf, name, value, strlen(name));
+			conf->put(conf, name, value, strlen(name));
 		} 
 		b = fgets(buffer, CONF_BUFFER_SIZE, f);
 	}

@@ -1,51 +1,58 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <time.h>
+
 #include <getopt.h>
+
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
-#include "lib/ping_list.h"
-#include "lib/chout.h"
-#include "lib/string_utils.h"
-#include "lib/htable.h"
-#include "lib/configuration.h"
-#include "lib/pscheck.h"
+
+#include <pthread.h>
+
+
+#include "chout.h"
+#include "string_utils.h"
+#include "htable.h"
+#include "configuration.h"
+
+#include "ping_list.h"
+#include "pscheck.h"
+#include "job.h"
 #include "pinger_config.h"
 
-#ifdef _PINGER_MOCK
-	#define PING "./pingmock"
-#else
-	#define PING "/bin/ping"
-#endif
+#include <pthreadpool.h>
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
 #define MAX_HOST "pinger.maxhost"
 #define NPING "pinger.default.nping"
+#define RPING "pinger.ping.runs"
 
 typedef struct _pinger_args {
 	char** hosts;
 	char* n_ping;
+	int runs;
 	int size;
 } pinger_args;
 
 void usage(char* prog_name, char* message);
 int isIpAddress(char* arg);
 pinger_args* check_argv(int argc, char* argv[], htable* conf);
-char* extract_ping_interval(const char* out_line);
-ping_stats* extract_ping_stats(char* stats_line);
-int extract_lost_packets(char* loss_line);
-void output(chunk_list* chunks);
 void version(char* prog_name);
+
+void chunkdestroy(void* chunklist);
+void strdestroy(void* str);
 
 
 int main(int argc, char *argv[]) {
 	char* conf_path[3] = {"../", argv[0], ".conf"};
 	char* conf_path_s = string_builder(conf_path, 3, NULL);
+
 	htable* conf = load_configuration(conf_path_s);
 	free(conf_path_s);
 	pinger_args* args = check_argv(argc, argv, conf);
@@ -53,52 +60,25 @@ int main(int argc, char *argv[]) {
 	if(args == NULL) {
 		exit(1);
 	}
-	chunk_list* chunks = new_chunk_list();
-	int q = 0;
-	for(int k=0; k<10; k++) {
-		char* ping_argv[5] = {PING, args->hosts[q], "-c", args->n_ping, NULL};
-		int filedes[2];
-		if (pipe(filedes) == -1) {
-			perror("pipe");
-			exit(1);
-		}
-		int pingStatus;
-		int p = fork();
-		if(p > 0) {
-			close(filedes[1]);
-			waitpid(p, &pingStatus, 0);
-			if(pingStatus == 0) {
-				char** ping_out = read_child_output(filedes[0]);
-				int i=1;
-				ping_time_chunk* plist = new_ping_chunk(atoi(args->n_ping));
-				while(i <= atoi(args->n_ping)) {
-					char* string_interval = extract_ping_interval(ping_out[i]);
-					plist->add(plist, atof(string_interval));
-					free(string_interval);
-					i++;
-				}
-				i = 0;
-				plist->chunk_stats = extract_ping_stats(ping_out[atoi(args->n_ping) + 4]);
-				plist->chunk_stats->loss = extract_lost_packets(ping_out[atoi(args->n_ping) + 3]);
-				check_stats(chunks, plist);
-				chunks->add(chunks, plist);
-				//plist->destroy(plist);
-				for(int i=0; i<atoi(args->n_ping) + 5; i++) {
-					free(ping_out[i]);
-				}
-				free(ping_out);
-			}
-			printf("%d) child with pid %d exited with status %d\n", k, p, pingStatus);
-			sleep(1);
-		} else {
-			//chunks->destroy(chunks);
-			while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR)) {}
-			close(filedes[0]);
-			execv(PING, ping_argv);
-		}
+
+	htable* hosts = new_htable(strdestroy, chunkdestroy);
+	for(int i=0; i<args->size; i++) {
+		hosts->put(hosts, args->hosts[i], new_chunk_list(), strlen(args->hosts[i]));
 	}
-	output(chunks);
-	chunks->destroy(chunks);
+	pthreadpool_t* tp = new_threadpool(4, 1);
+	pinger_thread_args* t_args = malloc(sizeof(pinger_thread_args) * args->size);
+	for(int t=0; t<args->size; t++) {
+		t_args[t].host = args->hosts[t];
+		t_args[t].n_ping = args->n_ping;
+		t_args[t].runs = args->runs;
+		t_args[t].hosts_data = hosts;
+		tp->add_task(tp, t_doping, &t_args[t]);
+	}
+	tp->start(tp);
+	sleep(10);
+	tp->stop(tp);
+	free(t_args);
+
 	conf->destroy(conf);
 	for(int i=0; i<args->size; i++) {
 		free(args->hosts[i]);
@@ -108,52 +88,14 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-void output(chunk_list* chunks) {
-	if(chunks->head != NULL) {
-		ping_time_chunk* ptr = chunks->head;
-		printf("min/ avg/ max/ sdev\n");
-		while(ptr != NULL) {
-			printf("%.3f/%.3f/%.3f/%.3f\n", ptr->chunk_stats->min, ptr->chunk_stats->avg, ptr->chunk_stats->max, ptr->chunk_stats->stdev);
-			ptr = ptr->next;
-		}
-		printf("-----------------------\n");
-		printf("%.3f/%.3f/%.3f/%.3f\n", chunks->global_stats->min, chunks->global_stats->avg, chunks->global_stats->max, chunks->global_stats->stdev);
-	} else {
-		printf("### No pings ###\n");
-	}
-	
+
+void chunkdestroy(void* chunklist) {
+	((chunk_list*) chunklist)->destroy(((chunk_list*) chunklist));
 }
 
 
-int extract_lost_packets(char* loss_line) {
-	char* transmitted = pattern_substring(loss_line, "", " packets transmitted");
-	char* received = pattern_substring(loss_line, "transmitted, ", " received,");
-	float ftransmitted = atoi(transmitted);
-	float freceived = atoi(received);
-	free(transmitted);
-	free(received);
-	return ftransmitted - freceived;
-}
-
-
-ping_stats* extract_ping_stats(char* stats_line) {
-	ping_stats* pstats = malloc(sizeof(ping_stats));
-	char* stats = pattern_substring(stats_line, " = ", " ms");
-	char* value = strtok(stats, "/");
-	pstats->min = atof(value);
-	value = strtok(NULL, "/");
-	pstats->avg = atof(value);
-	value = strtok(NULL, "/");
-	pstats->max = atof(value);
-	value = strtok(NULL, "/");
-	pstats->stdev = atof(value);
-	free(stats);
-	return pstats;
-}
-
-
-char* extract_ping_interval(const char* out_line) {
-	return pattern_substring(out_line, "time=", " ms");
+void strdestroy(void* str) {
+	free(str);
 }
 
 
@@ -188,7 +130,8 @@ void usage(char* prog_name, char* message) {
 	}
 	version(prog_name);
 	fprintf(stderr, "Use %s -l host_list... [-ch]\n", prog_name);
-	fprintf(stderr, "-c\t| number of ping\n");
+	fprintf(stderr, "-c\t| number of ping packets sent\n");
+	fprintf(stderr, "-r\t| number of ping runs\n");
 	fprintf(stderr, "-h\t| print this message\n");
 	fprintf(stderr, "\nhost_list:\t host comma separated list.\n");
 }
@@ -196,16 +139,21 @@ void usage(char* prog_name, char* message) {
 
 pinger_args* check_argv(int argc, char* argv[], htable* conf) {
 	if(argc <= 1) return NULL;
-	const char* optstring = "c:hv";
+	const char* optstring = "c:r:hv";
 	pinger_args* args = malloc(sizeof(pinger_args));
 	args->size = 0;
 	char optc;
-	int carg = 0;
+	int c_arg = 0;
+	int r_arg = 0;
 	while((optc = getopt(argc, argv, optstring)) != -1) {
 		switch(optc) {
 			case 'c': {
 				args->n_ping = optarg;
-				carg = 1;
+				c_arg = 1;
+			} break;
+			case 'r': {
+				args->runs = atoi(optarg);
+				r_arg = 1;
 			} break;
 			case 'h': {
 				usage(argv[0], NULL);
@@ -229,11 +177,20 @@ pinger_args* check_argv(int argc, char* argv[], htable* conf) {
 	}
 	if(optind > 0 && argv[optind] != NULL) {
 		args->hosts = strspltc(argv[optind], ',', &args->size);
+		if(args->size > atoi((char*) conf->get(conf, MAX_HOST, strlen(MAX_HOST)))) {
+			fprintf(stderr, "Warning: passed a number of hosts to ping greater than values of %s.\n" \
+				"Note that pinger generate a thread for each host passed, so if you think your machine " \
+				"is able to bear the load of %d threads, you can increase the value of %s in pinger.conf.\n", \
+				MAX_HOST, args->size, MAX_HOST);
+			return NULL;
+		}
 	} else {
 		usage(argv[0], "Missing host argument.");
 		return NULL;
 	}
-	if(!carg) args->n_ping = get(conf, NPING, strlen(NPING));
+	if(!c_arg) args->n_ping = conf->get(conf, NPING, strlen(NPING));
+	if(!r_arg) args->runs = atoi((char*) conf->get(conf, RPING, strlen(RPING)));
+
 	for(int i=1; i<argc; i++) {
 		if(!isIpAddress(argv[i])) {
 			char* errmessage = string_concat(argv[i], " is malformed.\n");

@@ -1,0 +1,2 @@
+add argument -r --run to choose the number of ping runs for each  host passed
+separe the job in thread

@@ -30,6 +30,8 @@ typedef struct _htable {
 	htable_entry_l** keys;					// keys array with length = size && valid items = nkeys
 	unsigned int (*htable_hashf)(void*);	// hashing function
     int (*key_compare)(void*, void*);  		// key compare function
+    void (*put) (struct _htable*, void*, void*, size_t);
+    void* (*get) (struct _htable*, void*, size_t);
     void (*destroy) (struct _htable*);
     void (*destroy_key) (void*);
     void (*destroy_val) (void*);

@@ -28,18 +28,15 @@ char* string_builder(char** ss, int len, char* sep) {
 	if(sep) {
 		s = malloc((sum_lens(ss, len) + (len * strlen(sep) - 1)) * sizeof(char) + sizeof(char));
 	} else {
-		s = malloc(sum_lens(ss, len) * sizeof(char));
+		s = malloc(sum_lens(ss, len) * sizeof(char) + sizeof(char));
 	}
-	int index = 0;
-	for(int i=0; i<len; i++) {
-		strncpy(&s[index], ss[i], strlen(ss[i]));
-		index += strlen(ss[i]);
+	strncpy(s, ss[0], strlen(ss[0]) + 1);
+	for(int i=1; i<len; i++) {
+		strncat(s, ss[i], strlen(ss[i]));
 		if(sep) {
-			strncpy(&s[index], sep, strlen(sep));  
-			index += strlen(sep);
+			strncat(s, sep, strlen(sep));  
 		}
 	}
-	if(sep) s[index-1] = '\0';
 	return s;
 }
 
@@ -100,7 +97,7 @@ char** strspltc(const char* s, char sep, int* final_size) {
 		ptr = strchr(s1, sep);
 		i++;
 	}
-	res[i] = strndup(s1, strlen(s));
+	res[i] = strndup(s1, strlen(s1));
 	free(tmp);
 	*final_size = nsep + 1;
 	return res;
