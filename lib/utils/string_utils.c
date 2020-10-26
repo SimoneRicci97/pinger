@@ -4,18 +4,29 @@
 #include "string_utils.h"
 
 char* pattern_substring(const char* s, char* begin_pattern, char* end_pattern) {
+	if(!s) return NULL;
 	char* copy = strndup(s, strlen(s));
 	char* index = strstr(copy, begin_pattern);
 	char* index1 = strstr(copy, end_pattern);
+	if(!index || !index1) {
+		free(copy);
+		return NULL;
+	}
 	index += strlen(begin_pattern)  * sizeof(char);
-	char* s1 = strndup(index, (index1 - index) / sizeof(char));
+	long sublen = (index1 - index) / sizeof(char);
+	printf("%s -> (%s|%s) %ld\n", copy, index, index1, sublen);
+	if(sublen <= 0) {
+		free(copy);
+		return NULL;
+	}
+	char* s1 = strndup(index, sublen);
 	free(copy);
 	return s1;
 }
 
 
 char* string_concat(char* s, char* s1) {
-	char** ss = malloc(2 * sizeof(char*));
+	char* ss[2];
 
 	ss[0] = s;
 	ss[1] = s1;

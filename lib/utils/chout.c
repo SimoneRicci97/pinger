@@ -8,9 +8,9 @@
 
 #define CHOUT_BUFFER_SIZE 128
 
-char** format_child_output(char* s);
+char** format_child_output(char* s, size_t* size);
 
-char** format_child_output(char* s) {
+char** format_child_output(char* s, size_t* size) {
 	char* store = s;
 	char** lines;
 	int n_lines = tkncntc(s, '\n');
@@ -32,11 +32,12 @@ char** format_child_output(char* s) {
 		}
 	}
 	lines[i] = NULL;
+	*size = i;
 	free(store);
 	return lines;
 }
 
-char** read_child_output(int fd) {
+char** read_child_output(int fd, size_t* size) {
 	char buffer[CHOUT_BUFFER_SIZE + 1];
 	char** out = malloc(128 * sizeof(char*));
 	int count = 0;
@@ -55,7 +56,7 @@ char** read_child_output(int fd) {
 	}
 	out[count] = NULL;
 	close(fd);
-	char** formatted = format_child_output(string_builder(out, count, NULL));
+	char** formatted = format_child_output(string_builder(out, count, NULL), size);
 	for(int i=0; i<count; i++) {
 		free(out[i]);
 	}

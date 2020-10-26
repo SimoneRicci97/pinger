@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pscheck.h"
-#include "ping_list.h"
+#include <pscheck.h>
+#include <ping_list.h>
 
 int check_avg(chunk_list* chunks, ping_chunk* ping);
 int check_avg_interval(chunk_list* chunks, ping_chunk* ping);
@@ -11,7 +11,7 @@ int check_avg(chunk_list* chunks, ping_chunk* ping);
 void destroy_tmp_chunklist(chunk_list* cl);
 
 void check_stats(chunk_list* chunks, ping_chunk* ping) {
-	if(chunks->global_stats != NULL) {
+	if(chunks->global_stats && ping->chunk_stats) {
 		if(check_avg(chunks, ping)) {
 			report(chunks, "avg", ping);
 		}

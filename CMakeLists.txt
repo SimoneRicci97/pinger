@@ -24,6 +24,7 @@ add_executable(pinger main.c)
 target_link_libraries(pinger PUBLIC pinglib)
 target_link_libraries(pinger PUBLIC utils)
 target_link_libraries(pinger PUBLIC pthread)
+target_link_libraries(pinger PUBLIC m)
 target_link_libraries(pinger PUBLIC pthreadpool)
 
 target_include_directories(pinger PUBLIC

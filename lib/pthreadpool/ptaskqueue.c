@@ -33,6 +33,7 @@ ptaskq_t* new_ptaskq(short circle) {
 	ptaskq->destroy = _ptaskq_destroy;
 	pthread_mutex_init(&ptaskq->mutex, NULL);
 	pthread_cond_init(&ptaskq->empty_semaphore, NULL);
+	pthread_cond_init(&ptaskq->nempty_semaphore, NULL);
 	return ptaskq;
 }
 
@@ -59,11 +60,11 @@ void _task_add(ptaskq_t* queue, ptask_t* ptask) {
 ptaskq_item* _task_next(ptaskq_t* queue, int* term) {
 	if(queue == NULL) return NULL;
 	pthread_mutex_lock(&queue->mutex);
-	while(queue->it == NULL && *term) {
+	while(queue->size == 0 && !*term) {
 		pthread_cond_wait(&queue->empty_semaphore, &queue->mutex);
 	}
 	//printf("Waiting end: %s - %d\n", CHECK_NEXT, *term);
-	if(!*term) {
+	if(*term) {
 		pthread_mutex_unlock(&queue->mutex);
 		return NULL;
 	}
@@ -71,7 +72,10 @@ ptaskq_item* _task_next(ptaskq_t* queue, int* term) {
 	ptaskq_item* res = queue->it;
 	//printf("Mocin it %s - %d\n", CHECK_NEXT, queue->size);
 	queue->it = queue->it->next;
-	if(!queue->circle) queue->size--;
+	if(!queue->circle) {
+		queue->size--;
+		pthread_cond_signal(&queue->nempty_semaphore);
+	}
 	//printf("releasing lock.  next is %s - %d\n", CHECK_NEXT, queue->size);
 	pthread_mutex_unlock(&queue->mutex);
 	//printf("returning a task: task(%d)\n", *((int*) res->task->t_arg->t_arg));
@@ -82,14 +86,16 @@ ptaskq_item* _task_next(ptaskq_t* queue, int* term) {
 void _ptaskq_destroy(ptaskq_t* ptaskq) {
 	pthread_mutex_destroy(&ptaskq->mutex);
 	pthread_cond_destroy(&ptaskq->empty_semaphore);
+	pthread_cond_destroy(&ptaskq->nempty_semaphore);
+	ptaskq_item* ptr = ptaskq->head;
 	while(ptaskq->head != ptaskq->tail) {
-		ptaskq_item* ptr = ptaskq->head;
 		ptaskq->head = ptaskq->head->next;
 		ptaskq->head->prec = NULL;
 		ptask_destroy(ptr->task);
 		free(ptr);
+		ptr = ptaskq->head;
 	}
-	ptask_destroy(ptaskq->tail->task);
-	free(ptaskq->tail);
+	if(ptaskq->tail->task) ptask_destroy(ptaskq->tail->task);
+	if(ptaskq->tail) free(ptaskq->tail);
 	free(ptaskq);
 }

@@ -13,7 +13,7 @@
 typedef struct _threadpool_status {
 	ptaskq_t* ptask_q;
 	exitq_t* exits;
-	int status;
+	int* status;
 	short* exitworker;
 	pthread_mutex_t status_mutex;
 } threadpool_status;
@@ -25,12 +25,13 @@ typedef struct _pthreadpool {
 	threadpool_status* status;
 	void (*start) (struct _pthreadpool*);
 	void (*stop) (struct _pthreadpool*);
+	void (*wait) (struct _pthreadpool*);
 	void (*add_task) (struct _pthreadpool* tp, void* (*task) (void*), void*);
 } pthreadpool_t;
 
 
 
-pthreadpool_t* new_threadpool(size_t size, short circle);
+pthreadpool_t* new_threadpool(size_t size, int* termflag, short circle);
 
 void destroy_pthreadpool(pthreadpool_t* tp);
 

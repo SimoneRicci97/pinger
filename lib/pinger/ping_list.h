@@ -12,6 +12,7 @@ typedef struct _ping_stats {
 } ping_stats;
 
 typedef struct _ping_time_chunk {
+	unsigned long ts;
 	float* values;
 	long index;
 	long size;
@@ -24,18 +25,22 @@ typedef struct _ping_time_chunk {
 
 
 typedef struct _chunk_list {
+	unsigned long tstart;
 	ping_chunk* head;
 	ping_chunk* tail;
 	int size;
 	ping_stats* global_stats;
 	void (*add) (struct _chunk_list*, ping_chunk*);
 	void (*destroy) (struct _chunk_list*);
+	void (*clear) (struct _chunk_list*);
 	pthread_mutex_t mutex;
 } chunk_list;
 
 ping_chunk* new_ping_chunk(long chunk_size);
 
 chunk_list* new_chunk_list();
+
+chunk_list* chunklist_clone(chunk_list* cl);
 
 chunk_list* sublist(chunk_list* cl, int start, int end);
 

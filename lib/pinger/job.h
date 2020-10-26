@@ -10,7 +10,7 @@ typedef struct _pinger_thread_args {
 	htable* hosts_data;
 } pinger_thread_args;
 
-void* t_doping(void* args);
+void* doping_r(void* args);
 
 
 #endif

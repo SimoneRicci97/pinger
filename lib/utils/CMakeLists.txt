@@ -10,6 +10,6 @@ add_compile_options(-O3)
 add_compile_options(-DMAKE_VALGRIND_HAPPY)
 add_compile_options(-D_GNU_SOURCE)
 
-add_library(utils chout.c chout.h string_utils.c string_utils.h htable.c htable.h configuration.c configuration.h)
+add_library(utils chout.c chout.h string_utils.c string_utils.h htable.c htable.h configuration.c configuration.h uttime.c uttime.h utlist.c utlist.h)
 
 target_include_directories(utils PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

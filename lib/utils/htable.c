@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "htable.h"
+#include <htable.h>
 #include <limits.h>
 
 htable_entry* __get_by_key(htable* ht, htable_entry_l* hashed, void* key);
@@ -44,6 +44,7 @@ htable* new_htable_lf(float load_factor, void (*destroy_key) (void*), \
 	for(long i=0; i<ht->size; i++) {
 		ht->keys[i] = NULL;
 	}
+	pthread_mutex_init(&ht->mutex, NULL);
 	ht->htable_hashf = hash_function;
 	ht->key_compare = keys_compare;
 	ht->destroy = _htabledestroy;
@@ -63,13 +64,14 @@ void _htabledestroy(htable* ht) {
 				//ht->keys[i]->head->prec = NULL;
 				ptr->next = NULL;
 				ht->destroy_key(ptr->key);
-				ht->destroy_key(ptr->data);
+				ht->destroy_val(ptr->data);
 				free(ptr);
 				ptr = ht->keys[i]->head;
 			}
 			free(ht->keys[i]);
 		}
 	}
+	pthread_mutex_destroy(&ht->mutex);
 	free(ht->keys);
 	free(ht);
 }
@@ -100,7 +102,6 @@ void _put(htable* ht, void* key, void* value, size_t size) {
 void* _get(htable* ht, void* key, size_t size) {
 	unsigned int hash_code = ht->htable_hashf(key);
 	htable_entry_l* ptr = ht->keys[hash_code];
-
 	htable_entry* entry = __get_by_key(ht, ptr, key);
 	if(entry != NULL) return entry->data;
 	return NULL;

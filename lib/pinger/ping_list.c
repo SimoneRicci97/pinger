@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include "ping_list.h"
+#include <ping_list.h>
+#include <uttime.h>
 
 void _add(ping_chunk* l, float interval);
 void _destroy(ping_chunk* l);
 void _add_chunk(chunk_list* cl, ping_chunk* chunk);
 void _destroy_chunk_list(chunk_list* cl);
+void _clear_chunk_list(chunk_list* cl);
 float __min__(float f1, float f2);
 float __max__(float f1, float f2);
 chunk_list* new_chunk_list();
@@ -14,6 +16,7 @@ ping_chunk* ping_chunk_clone(ping_chunk* toclone);
 
 ping_chunk* new_ping_chunk(long chunk_size) {
 	ping_chunk* l = malloc(sizeof(ping_chunk));
+	l->ts = get_current_millis();
 	l->values = malloc(sizeof(float) * chunk_size);
 	l->size = 0;
 	l->index = 0;
@@ -57,7 +60,6 @@ void _destroy(ping_chunk* l) {
 
 
 void _add_chunk(chunk_list* cl, ping_chunk* chunk) {
-	pthread_mutex_lock(&cl->mutex);
 	if(cl->head == NULL) cl->head = chunk;
 	chunk->next = NULL;
 	chunk->prec = cl->tail;
@@ -81,7 +83,6 @@ void _add_chunk(chunk_list* cl, ping_chunk* chunk) {
 		cl->global_stats = stats;
 	}
 	cl->size++;
-	pthread_mutex_unlock(&cl->mutex);
 }
 
 
@@ -99,6 +100,28 @@ void _destroy_chunk_list(chunk_list* cl) {
 	free(cl);
 }
 
+
+void _clear_chunk_list(chunk_list* cl){
+	pthread_mutex_lock(&cl->mutex);
+	fprintf(stderr, "clearing\n");
+	ping_chunk* ptr = cl->head;
+	while(ptr != NULL) {
+		ptr->prec = NULL;
+		cl->head = ptr->next;
+		ptr->destroy(ptr);
+		ptr = cl->head;
+	}if(cl->global_stats != NULL) {
+		free(cl->global_stats);
+		cl->global_stats = NULL;
+	}
+	cl->head = NULL;
+	cl->tail = NULL;
+	cl->size = 0;
+	cl->tstart = get_current_millis();
+	pthread_mutex_unlock(&cl->mutex);
+}
+
+
 float __min__(float f1, float f2) {
 	return f1 < f2 ? f1 : f2;
 }
@@ -109,14 +132,20 @@ float __max__(float f1, float f2) {
 
 chunk_list* new_chunk_list() {
 	chunk_list* cl = malloc(sizeof(chunk_list));
+	cl->tstart = get_current_millis();
 	cl->head = NULL;
 	cl->tail = NULL;
 	cl->size = 0;
 	cl->global_stats = NULL;
 	cl->add = _add_chunk;
 	cl->destroy = _destroy_chunk_list;
+	cl->clear = _clear_chunk_list;
 	pthread_mutex_init(&cl->mutex, NULL);
 	return cl;
+}
+
+chunk_list* chunklist_clone(chunk_list* cl) {
+	return sublist(cl, 0, cl->size);
 }
 
 chunk_list* sublist2end(chunk_list* cl, int start) {

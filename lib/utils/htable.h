@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
+#include <pthread.h>
 
 #define LOAD_FACTOR 0.75f
 #define DEFAULT_SIZE 4999
@@ -30,6 +31,7 @@ typedef struct _htable {
 	htable_entry_l** keys;					// keys array with length = size && valid items = nkeys
 	unsigned int (*htable_hashf)(void*);	// hashing function
     int (*key_compare)(void*, void*);  		// key compare function
+    pthread_mutex_t mutex;
     void (*put) (struct _htable*, void*, void*, size_t);
     void* (*get) (struct _htable*, void*, size_t);
     void (*destroy) (struct _htable*);

@@ -25,6 +25,7 @@ typedef struct _ptaskq {
 	void (*destroy) (struct _ptaskq*);
 	pthread_mutex_t mutex;
 	pthread_cond_t empty_semaphore;
+	pthread_cond_t nempty_semaphore;
 } ptaskq_t;
 
 ptaskq_item* new_ptaskq_item(ptask_t* ptask);

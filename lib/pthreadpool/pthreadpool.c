@@ -15,9 +15,10 @@ typedef struct _worker_args {
 void* tpt_worker(void* args_queue);
 void tpt_start(pthreadpool_t* tp);
 void tpt_stop(pthreadpool_t* tp);
+void tpt_wait(pthreadpool_t* tp);
 void tpt_add_task(pthreadpool_t* tp, void* (*task) (void*), void* taskarg);
 
-pthreadpool_t* new_threadpool(size_t size, short circle) {
+pthreadpool_t* new_threadpool(size_t size, int* termflag, short circle) {
 	pthreadpool_t* tp = malloc(sizeof(pthreadpool_t));
 	tp->workers = malloc(size * sizeof(pthread_t));
 	tp->size = size;
@@ -26,7 +27,7 @@ pthreadpool_t* new_threadpool(size_t size, short circle) {
 	ptaskq_t* task_q = new_ptaskq(circle);
 	threadpool_status* tp_status = malloc(sizeof(threadpool_status));
 	tp_status->exitworker = calloc(size, sizeof(short));
-	tp_status->status = 1;
+	tp_status->status = termflag;
 	tp_status->ptask_q = task_q;
 	tp_status->exits = retvals;
 	
@@ -35,6 +36,7 @@ pthreadpool_t* new_threadpool(size_t size, short circle) {
 	tp->start = tpt_start;
 	tp->add_task = tpt_add_task;
 	tp->stop = tpt_stop;
+	tp->wait = tpt_wait;
 
 	pthread_mutex_init(&tp->status->status_mutex, NULL);
 	return tp;
@@ -44,15 +46,15 @@ void tpt_add_task(pthreadpool_t* tp, void* (*task) (void*), void* taskarg) {
 	ptask_t* ptask = malloc(sizeof(ptask_t));
 	ptask->t_arg = malloc(sizeof(ptaskarg_t));
 	ptask->t_arg->t_arg = taskarg;
-	ptask->t_arg->status = &tp->status->status;
+	ptask->t_arg->status = tp->status->status;
 	ptask->routine = task;
 	tp->status->ptask_q->add(tp->status->ptask_q, ptask);
 }
 
 void tpt_stop(pthreadpool_t* tp) {
-	printf("STOP\n");
+	fprintf(stderr, "Killing threads. Use ctrl+C to exit...\n");
 	pthread_mutex_lock(&tp->status->status_mutex);
-	tp->status->status = 0;
+	*tp->status->status = 1;
 	pthread_mutex_unlock(&tp->status->status_mutex);
 	int exited = 0;
 	while(exited < tp->size) {
@@ -73,6 +75,36 @@ void tpt_stop(pthreadpool_t* tp) {
 		}
 	}
 	
+}
+
+
+void tpt_wait(pthreadpool_t* tp) {
+	fprintf(stderr, "Waiting for ends of all tasks. Use ctrl+C to exit...\n");
+	pthread_mutex_lock(&tp->status->ptask_q->mutex);
+	while(tp->status->ptask_q->size > 0) {
+		pthread_cond_wait(&tp->status->ptask_q->nempty_semaphore, &tp->status->ptask_q->mutex);
+	}
+	pthread_mutex_unlock(&tp->status->ptask_q->mutex);
+	*tp->status->status = 1;
+	int exited = 0;
+	while(exited < tp->size) {
+		for(int i=0; i<tp->size; i++) {
+			void* workerexit_v;
+			pthread_cond_signal(&tp->status->ptask_q->empty_semaphore);
+			if(tp->status->exitworker[i] == 1) {
+				printf("%d exited\n", i);
+				tp->status->exitworker[i] = 2;
+				pthread_join(tp->workers[i], &workerexit_v);
+				pthread_cancel(tp->workers[i]);
+				int* workerexit = (int*) workerexit_v;
+				if(*workerexit) {
+					fprintf(stderr, "%dth worker failed\n", i);
+				}
+				free(workerexit_v);
+				exited++;
+			}
+		}
+	}
 }
 
 
@@ -97,10 +129,10 @@ void* tpt_worker(void* __args) {
 	int id = wargs->wid;
 	pthread_mutex_t status_mutex = wargs->status->status_mutex;
 	int retval = 0;
-	int* status = &wargs->status->status;
+	int* status = wargs->status->status;
 	pthread_mutex_lock(&status_mutex);
 	//printf("%d - %d\n", *status, ptask_queue->size);
-	while(*status) {
+	while(!*status) {
 		pthread_mutex_unlock(&status_mutex);
 		ptaskq_item* task_item = (ptask_queue->next(ptask_queue, status));
 		if(task_item != NULL && task_item->task) {

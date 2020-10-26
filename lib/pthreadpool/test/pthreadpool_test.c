@@ -74,9 +74,10 @@ ulong test_1thread(int* a) {
 }
 
 ulong test_nthread(int* a, int nthreads, int chunksize) {
+	int TERM = 0;
 	printf("Test with %d threads and chunksize = %d\n", nthreads, chunksize);
 	printf("N tasks: %d\n", TEST_SIZE/chunksize);
-	pthreadpool_t* tp = new_threadpool(nthreads, 0);
+	pthreadpool_t* tp = new_threadpool(nthreads, &TERM, 0);
 	for(int i=0; i<TEST_SIZE; i+=chunksize) {
 		chunk_t* args = malloc(sizeof(chunk_t));
 		args->a = a;
@@ -90,7 +91,7 @@ ulong test_nthread(int* a, int nthreads, int chunksize) {
 	int returned = 0;
 	while(returned<TEST_SIZE/chunksize) {
 		//printf("waiting for retval\n");
-		void* retval = tp->status->exits->get(tp->status->exits, &tp->status->status);
+		void* retval = tp->status->exits->get(tp->status->exits, tp->status->status);
 		if(retval) {
 			ulong* chunksum = malloc(sizeof(ulong));
 			memcpy(chunksum, retval, sizeof(ulong));
