@@ -14,7 +14,6 @@ char* pattern_substring(const char* s, char* begin_pattern, char* end_pattern) {
 	}
 	index += strlen(begin_pattern)  * sizeof(char);
 	long sublen = (index1 - index) / sizeof(char);
-	printf("%s -> (%s|%s) %ld\n", copy, index, index1, sublen);
 	if(sublen <= 0) {
 		free(copy);
 		return NULL;
