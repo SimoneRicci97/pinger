@@ -31,4 +31,5 @@ target_include_directories(pinger PUBLIC
                           "${PROJECT_BINARY_DIR}"
                           "${PROJECT_SOURCE_DIR}/lib/utils"
                           "${PROJECT_SOURCE_DIR}/lib/pinger"
+                          "${PROJECT_SOURCE_DIR}/lib/pthreadpool"
                           )

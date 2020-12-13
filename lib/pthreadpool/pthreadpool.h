@@ -23,10 +23,6 @@ typedef struct _pthreadpool {
 	pthread_t* workers;
 	size_t size;
 	threadpool_status* status;
-	void (*start) (struct _pthreadpool*);
-	void (*stop) (struct _pthreadpool*);
-	void (*wait) (struct _pthreadpool*);
-	void (*add_task) (struct _pthreadpool* tp, void* (*task) (void*), void*);
 } pthreadpool_t;
 
 
@@ -34,5 +30,11 @@ typedef struct _pthreadpool {
 pthreadpool_t* new_threadpool(size_t size, int* termflag, short circle);
 
 void destroy_pthreadpool(pthreadpool_t* tp);
+
+void ptp_wait(pthreadpool_t* tp);
+void ptp_start(pthreadpool_t* tp);
+void ptp_stop(pthreadpool_t* tp);
+void ptp_waitstop(pthreadpool_t* tp);
+void ptp_add_task(pthreadpool_t* tp, void* (*task) (void*), void* taskarg);
 
 #endif

@@ -20,9 +20,6 @@ typedef struct _ptaskq {
 	ptaskq_item* it;
 	int size;
 	short circle;
-	void (*add) (struct _ptaskq*, ptask_t*);
-	ptaskq_item* (*next) (struct _ptaskq* queue, int* term);
-	void (*destroy) (struct _ptaskq*);
 	pthread_mutex_t mutex;
 	pthread_cond_t empty_semaphore;
 	pthread_cond_t nempty_semaphore;
@@ -32,5 +29,8 @@ ptaskq_item* new_ptaskq_item(ptask_t* ptask);
 
 ptaskq_t* new_ptaskq(short circle);
 
+void ptaskq_add(ptaskq_t* queue, ptask_t* ptask);
+ptaskq_item* ptaskq_next(ptaskq_t* queue, int* term);
+void ptaskq_destroy(ptaskq_t* ptaskq);
 
 #endif

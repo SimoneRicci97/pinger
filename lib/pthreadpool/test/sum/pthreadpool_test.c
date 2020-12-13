@@ -8,7 +8,10 @@
 #include <pthreadpool.h>
 
 
-#define TEST_SIZE 100000000
+#define TEST_SIZE 10000000
+#define SMALL_CHUNKS 1 / 100
+#define BIG_CHUNKS 1 / 10
+
 typedef struct timeval mtime;
 
 typedef struct _chunk {
@@ -21,7 +24,7 @@ void* sum10_routine(void* args);
 ulong test_1thread(int* a);
 ulong test_nthread(int* a, int nthreads, int chunksize);
 void nthreads_report(int* a, int nthreads, int chunksize);
-ulong gettimeofdaymillis();
+ulong gettimeofdaymicros();
 
 int main(int argc, char const *argv[])
 {
@@ -34,21 +37,25 @@ int main(int argc, char const *argv[])
 	}
 	fprintf(stderr, "Array initialized\n");
 
-	t0 = gettimeofdaymillis();
+	t0 = gettimeofdaymicros();
 	sum = test_1thread(a);
-	t1 = gettimeofdaymillis();
+	t1 = gettimeofdaymicros();
 	fprintf(stderr, "Single thread\n");
 	fprintf(stderr, "\tSum: %ld\n", sum);
-	fprintf(stderr, "\tExecution time: %.2f\n", (t1 - t0) / 1000.f);
+	fprintf(stderr, "\tExecution time: %.2f micros\n", (t1 - t0) / 1000.f);
 
 	printf("\n");
-	nthreads_report(a, 2, 1000);
+	nthreads_report(a, 2, TEST_SIZE * SMALL_CHUNKS);
 	printf("\n");
-	nthreads_report(a, 2, 10000);
+	nthreads_report(a, 2, TEST_SIZE * BIG_CHUNKS);
 	printf("\n");
-	nthreads_report(a, 4, 1000);
+	nthreads_report(a, 4, TEST_SIZE * SMALL_CHUNKS);
 	printf("\n");
-	nthreads_report(a, 4, 10000);
+	nthreads_report(a, 4, TEST_SIZE * BIG_CHUNKS);
+	printf("\n");
+	nthreads_report(a, 8, TEST_SIZE * SMALL_CHUNKS);
+	printf("\n");
+	nthreads_report(a, 8, TEST_SIZE * BIG_CHUNKS);
 
 	free(a);
 }
@@ -56,13 +63,13 @@ int main(int argc, char const *argv[])
 void nthreads_report(int* a, int nthreads, int chunksize) {
 	ulong t0, t1;
 	ulong sum;
-	t0 = gettimeofdaymillis();
+	t0 = gettimeofdaymicros();
 	sum = test_nthread(a, nthreads, chunksize);
-	t1 = gettimeofdaymillis();
+	t1 = gettimeofdaymicros();
 	fprintf(stderr, "%d threads\n", nthreads);
 	fprintf(stderr, "Chunksize: %d\n", chunksize);
 	fprintf(stderr, "\tSum: %ld\n", sum);
-	fprintf(stderr, "\tExecution time: %.2f\n", (t1 - t0) / 1000.f);
+	fprintf(stderr, "\tExecution time: %.2f micros\n", (t1 - t0) / 1000.f);
 }
 
 ulong test_1thread(int* a) {
@@ -83,48 +90,48 @@ ulong test_nthread(int* a, int nthreads, int chunksize) {
 		args->a = a;
 		args->begin = i;
 		args->end = i + chunksize;
-		tp->add_task(tp, sum10_routine, args);
+		ptp_add_task(tp, sum10_routine, args);
 	}
-	printf("Addedd all tasks. Starting threadpool\n");
-	tp->start(tp);
+	ptp_start(tp);
+	int freed=0;
 	ulong totsum = 0;
 	int returned = 0;
 	while(returned<TEST_SIZE/chunksize) {
-		//printf("waiting for retval\n");
-		void* retval = tp->status->exits->get(tp->status->exits, tp->status->status);
+		exit_item_t* retval = pretval_get(tp->status->exits, tp->status->status);
 		if(retval) {
 			ulong* chunksum = malloc(sizeof(ulong));
-			memcpy(chunksum, retval, sizeof(ulong));
+			memcpy(chunksum, retval->exit_status, sizeof(ulong));
 			totsum += *chunksum;
-			//printf("gotten %ld -> %ld\n", *chunksum, totsum);
 			returned ++;
 			free(chunksum);
+			free(retval->exit_status);
 			free(retval);
+			freed++;
 		}
 	}
-	tp->stop(tp);
+//	printf("freed %d els\n", freed);
+	ptp_stop(tp);
 	destroy_pthreadpool(tp);
 	return totsum;
 }
 
 void* sum10_routine(void* args) {
 	chunk_t* chunk = malloc(sizeof(chunk_t));
-	memcpy(chunk, ((ptaskarg_t*)args)->t_arg, sizeof(chunk_t));
+	memcpy(chunk, args, sizeof(chunk_t));
 	ulong sum = 0;
 	for(int i=chunk->begin; i<chunk->end; i++) {
 		sum += chunk->a[i];
 	} 
 	void* ret = malloc(sizeof(ulong));
 	memcpy(ret, &sum, sizeof(ulong));
-	//printf("%d) returning %ld - %ld\n", call++, sum, *(ulong*)ret);
 	free(chunk);
 	return ret;
 }
 
-ulong gettimeofdaymillis() {
+ulong gettimeofdaymicros() {
 	mtime t;
 	gettimeofday(&t, NULL);
-	ulong s1 = t.tv_sec * 1000;
-	ulong s2 = t.tv_usec / 1000;
+	ulong s1 = t.tv_sec * 1000 * 1000;
+	ulong s2 = t.tv_usec;
 	return s1 + s2;
 }

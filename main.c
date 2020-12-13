@@ -128,11 +128,11 @@ int main(int argc, char *argv[]) {
 		r_args[h]->n_ping = args->n_ping;
 		r_args[h]->runs = args->runs;
 		r_args[h]->hosts_data = hosts;
-		tp->add_task(tp, doping_r, r_args[h]);
+		ptp_add_task(tp, doping_r, r_args[h]);
 		t++;
 		h = (h + 1) % args->size;
 	}
-	tp->start(tp);
+	ptp_start(tp);
 	
 	sigemptyset(&handler_arg->sighandl->sigset);
 	sigaddset(&handler_arg->sighandl->sigset, SIGTERM);
@@ -158,8 +158,8 @@ int main(int argc, char *argv[]) {
 	free(handler_arg->sighandl);
 	free(handler_arg);
 
-	if(!circletp) tp->wait(tp);
-	else tp->stop(tp);
+	if(!circletp) ptp_wait(tp);
+	else ptp_stop(tp);
 
 	destroy_pthreadpool(tp);
 	free(r_args);

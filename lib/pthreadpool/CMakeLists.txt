@@ -10,11 +10,4 @@ add_compile_options(-O3)
 add_compile_options(-DMAKE_VALGRIND_HAPPY)
 add_compile_options(-D_GNU_SOURCE)
 
-add_subdirectory(test)
-
 add_library(pthreadpool pthreadpool.c pthreadpool.h pretvalqueue.c pretvalqueue.h ptask.c ptask.h ptaskqueue.c ptaskqueue.h)
-
-target_link_libraries(pthreadpool PUBLIC pthread)
-
-target_include_directories(pinglib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(pinglib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../utils)
